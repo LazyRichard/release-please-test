@@ -4,7 +4,7 @@
   <parent>
     <groupId>dev.releasepipe.test</groupId>
     <artifactId>release-please-test</artifactId>
-    <version>1.3.0-SNAPSHOT</version>
+    <version>1.3.0</version>
   </parent>
   <artifactId>module-a</artifactId>
 </project>
