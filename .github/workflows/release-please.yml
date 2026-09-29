@@ -1,0 +1,76 @@
+name: Release Please Maven branch policy
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+  workflow_dispatch:
+    inputs:
+      main_bump:
+        description: 'Use major on main; minor is the default. Release branches always use patch.'
+        type: choice
+        options:
+          - minor
+          - major
+        default: minor
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Select branch policy
+        id: policy
+        shell: bash
+        env:
+          REQUESTED_BUMP: ${{ inputs.main_bump || vars.RELEASE_PLEASE_MAIN_BUMP || 'minor' }}
+        run: |
+          case "$GITHUB_REF_NAME" in
+            main)
+              if [[ "$REQUESTED_BUMP" == major ]]; then
+                config=config/release-main-major.json
+              else
+                config=config/release-main-minor.json
+              fi
+              ;;
+            release/*)
+              config=config/release-branch-patch.json
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
+          echo "config=$config" >> "$GITHUB_OUTPUT"
+          echo "Using $config for $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create release PR or publish merged release
+        id: release
+        uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          config-file: ${{ steps.policy.outputs.config }}
+          manifest-file: .release-please-manifest.json
+          target-branch: ${{ github.ref_name }}
+
+      - name: Record action outputs
+        shell: bash
+        env:
+          RELEASES_CREATED: ${{ steps.release.outputs.releases_created }}
+          RELEASE_CREATED: ${{ steps.release.outputs.release_created }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+        run: |
+          {
+            echo "releases_created=$RELEASES_CREATED"
+            echo "release_created=$RELEASE_CREATED"
+            echo "tag_name=$TAG_NAME"
+          } >> "$GITHUB_STEP_SUMMARY"
